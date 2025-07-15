@@ -75,6 +75,332 @@ class PerformanceMonitor {
     }
 }
 
+class TextFireworks {
+    constructor() {
+        this.charSpacing = 60;
+        this.lineHeight = 80;
+        this.maxCharsPerLine = 15;
+        this.textQueue = [];
+        this.isPlaying = false;
+        this.currentLine = 0;
+        this.currentChar = 0;
+        this.charDelay = 300; // ms between characters
+        this.lineDelay = 1500; // ms between lines
+    }
+    
+    // Character patterns for fireworks (simplified bitmap)
+    getCharacterPattern(char) {
+        const patterns = {
+            'A': [
+                '  ██  ',
+                ' ████ ',
+                '██  ██',
+                '██████',
+                '██  ██'
+            ],
+            'B': [
+                '█████ ',
+                '██  ██',
+                '█████ ',
+                '██  ██',
+                '█████ '
+            ],
+            'C': [
+                ' █████',
+                '██    ',
+                '██    ',
+                '██    ',
+                ' █████'
+            ],
+            'D': [
+                '█████ ',
+                '██  ██',
+                '██  ██',
+                '██  ██',
+                '█████ '
+            ],
+            'E': [
+                '██████',
+                '██    ',
+                '█████ ',
+                '██    ',
+                '██████'
+            ],
+            'F': [
+                '██████',
+                '██    ',
+                '█████ ',
+                '██    ',
+                '██    '
+            ],
+            'G': [
+                ' █████',
+                '██    ',
+                '██ ███',
+                '██  ██',
+                ' █████'
+            ],
+            'H': [
+                '██  ██',
+                '██  ██',
+                '██████',
+                '██  ██',
+                '██  ██'
+            ],
+            'I': [
+                '██████',
+                '  ██  ',
+                '  ██  ',
+                '  ██  ',
+                '██████'
+            ],
+            'J': [
+                '██████',
+                '    ██',
+                '    ██',
+                '██  ██',
+                ' █████'
+            ],
+            'K': [
+                '██  ██',
+                '██ ██ ',
+                '████  ',
+                '██ ██ ',
+                '██  ██'
+            ],
+            'L': [
+                '██    ',
+                '██    ',
+                '██    ',
+                '██    ',
+                '██████'
+            ],
+            'M': [
+                '██████',
+                '██████',
+                '██  ██',
+                '██  ██',
+                '██  ██'
+            ],
+            'N': [
+                '██  ██',
+                '███ ██',
+                '██████',
+                '██ ███',
+                '██  ██'
+            ],
+            'O': [
+                ' █████',
+                '██  ██',
+                '██  ██',
+                '██  ██',
+                ' █████'
+            ],
+            'P': [
+                '█████ ',
+                '██  ██',
+                '█████ ',
+                '██    ',
+                '██    '
+            ],
+            'Q': [
+                ' █████',
+                '██  ██',
+                '██  ██',
+                '██ ███',
+                ' ██████'
+            ],
+            'R': [
+                '█████ ',
+                '██  ██',
+                '█████ ',
+                '██ ██ ',
+                '██  ██'
+            ],
+            'S': [
+                ' █████',
+                '██    ',
+                ' ████ ',
+                '    ██',
+                '█████ '
+            ],
+            'T': [
+                '██████',
+                '  ██  ',
+                '  ██  ',
+                '  ██  ',
+                '  ██  '
+            ],
+            'U': [
+                '██  ██',
+                '██  ██',
+                '██  ██',
+                '██  ██',
+                ' █████'
+            ],
+            'V': [
+                '██  ██',
+                '██  ██',
+                '██  ██',
+                ' ████ ',
+                '  ██  '
+            ],
+            'W': [
+                '██  ██',
+                '██  ██',
+                '██  ██',
+                '██████',
+                '██████'
+            ],
+            'X': [
+                '██  ██',
+                ' ████ ',
+                '  ██  ',
+                ' ████ ',
+                '██  ██'
+            ],
+            'Y': [
+                '██  ██',
+                '██  ██',
+                ' ████ ',
+                '  ██  ',
+                '  ██  '
+            ],
+            'Z': [
+                '██████',
+                '   ██ ',
+                '  ██  ',
+                ' ██   ',
+                '██████'
+            ],
+            ' ': [
+                '      ',
+                '      ',
+                '      ',
+                '      ',
+                '      '
+            ],
+            '!': [
+                '  ██  ',
+                '  ██  ',
+                '  ██  ',
+                '      ',
+                '  ██  '
+            ],
+            '?': [
+                ' █████',
+                '██  ██',
+                '   ██ ',
+                '      ',
+                '  ██  '
+            ],
+            '.': [
+                '      ',
+                '      ',
+                '      ',
+                '      ',
+                '  ██  '
+            ],
+            ',': [
+                '      ',
+                '      ',
+                '      ',
+                '  ██  ',
+                ' ██   '
+            ],
+            ':': [
+                '      ',
+                '  ██  ',
+                '      ',
+                '  ██  ',
+                '      '
+            ],
+            '♥': [
+                ' ██ ██',
+                '██████',
+                '██████',
+                ' ████ ',
+                '  ██  '
+            ],
+            '★': [
+                '  ██  ',
+                ' ████ ',
+                '██████',
+                ' ████ ',
+                '██  ██'
+            ]
+        };
+        
+        return patterns[char.toUpperCase()] || patterns[' '];
+    }
+    
+    breakTextIntoLines(text) {
+        const words = text.split(' ');
+        const lines = [];
+        let currentLine = '';
+        
+        for (const word of words) {
+            if ((currentLine + word).length <= this.maxCharsPerLine) {
+                currentLine += (currentLine ? ' ' : '') + word;
+            } else {
+                if (currentLine) {
+                    lines.push(currentLine);
+                    currentLine = word;
+                } else {
+                    // Word too long, break it
+                    lines.push(word.substring(0, this.maxCharsPerLine));
+                    currentLine = word.substring(this.maxCharsPerLine);
+                }
+            }
+        }
+        
+        if (currentLine) {
+            lines.push(currentLine);
+        }
+        
+        return lines;
+    }
+    
+    createCharacterFireworks(char, x, y, fireworksInstance) {
+        const pattern = this.getCharacterPattern(char);
+        const colors = ['#ff0080', '#00ff80', '#8000ff', '#ff8000', '#0080ff', '#ff0040', '#40ff00'];
+        const color = colors[Math.floor(Math.random() * colors.length)];
+        
+        const pixelSize = 4;
+        const particlesPerPixel = 3;
+        
+        for (let row = 0; row < pattern.length; row++) {
+            for (let col = 0; col < pattern[row].length; col++) {
+                if (pattern[row][col] === '█') {
+                    const pixelX = x + col * pixelSize;
+                    const pixelY = y + row * pixelSize;
+                    
+                    // Create multiple particles per pixel for better effect
+                    for (let p = 0; p < particlesPerPixel; p++) {
+                        const particle = fireworksInstance.particlePool.get();
+                        if (!particle) continue;
+                        
+                        const angle = Math.random() * Math.PI * 2;
+                        const speed = Math.random() * 2 + 1;
+                        
+                        particle.x = pixelX + Math.random() * pixelSize;
+                        particle.y = pixelY + Math.random() * pixelSize;
+                        particle.vx = Math.cos(angle) * speed;
+                        particle.vy = Math.sin(angle) * speed;
+                        particle.life = 1.0;
+                        particle.decay = Math.random() * 0.015 + 0.01;
+                        particle.color = color;
+                        particle.size = Math.random() * 2 + 1;
+                        particle.gravity = 0.02;
+                        particle.fractalPhase = Math.random() * Math.PI * 2;
+                        particle.depth = 0;
+                    }
+                }
+            }
+        }
+    }
+}
+
 class FractalFireworks {
     constructor(canvas) {
         this.canvas = canvas;
@@ -93,6 +419,9 @@ class FractalFireworks {
         this.fireworkSize = 1;
         this.baseParticleCount = 80; // Reduced from 150
         this.fractalDepth = 3; // Reduced from 4
+        
+        // Text fireworks system
+        this.textFireworks = new TextFireworks();
         
         // Rendering optimization
         this.colorGroups = new Map();
@@ -134,6 +463,16 @@ class FractalFireworks {
         document.getElementById('sizeSlider').addEventListener('input', (e) => {
             this.fireworkSize = parseFloat(e.target.value);
             document.getElementById('sizeValue').textContent = this.fireworkSize.toFixed(1);
+        });
+        
+        document.getElementById('textFireworksButton').addEventListener('click', () => {
+            this.createTextFireworks();
+        });
+        
+        document.getElementById('textInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                this.createTextFireworks();
+            }
         });
         
         this.canvas.addEventListener('click', (e) => {
@@ -214,6 +553,72 @@ class FractalFireworks {
         if (!this.animationId) {
             this.animate();
         }
+    }
+    
+    createTextFireworks() {
+        const textInput = document.getElementById('textInput');
+        const text = textInput.value.trim();
+        
+        if (!text) return;
+        
+        // Disable button during animation
+        const button = document.getElementById('textFireworksButton');
+        button.disabled = true;
+        button.textContent = '⏳ Playing...';
+        
+        // Break text into lines
+        const lines = this.textFireworks.breakTextIntoLines(text);
+        
+        // Start text animation
+        this.animateTextLines(lines, 0, () => {
+            // Re-enable button when done
+            button.disabled = false;
+            button.textContent = '✨ Text Fireworks';
+            textInput.value = '';
+        });
+    }
+    
+    animateTextLines(lines, currentLineIndex, callback) {
+        if (currentLineIndex >= lines.length) {
+            if (callback) callback();
+            return;
+        }
+        
+        const line = lines[currentLineIndex];
+        const startY = this.canvas.height * 0.3 + (currentLineIndex * this.textFireworks.lineHeight);
+        const startX = (this.canvas.width - (line.length * this.textFireworks.charSpacing)) / 2;
+        
+        // Animate characters in this line
+        this.animateCharacters(line, startX, startY, 0, () => {
+            // Wait before next line
+            setTimeout(() => {
+                this.animateTextLines(lines, currentLineIndex + 1, callback);
+            }, this.textFireworks.lineDelay);
+        });
+    }
+    
+    animateCharacters(text, startX, startY, charIndex, callback) {
+        if (charIndex >= text.length) {
+            if (callback) callback();
+            return;
+        }
+        
+        const char = text[charIndex];
+        const x = startX + (charIndex * this.textFireworks.charSpacing);
+        const y = startY;
+        
+        // Create fireworks for this character
+        this.textFireworks.createCharacterFireworks(char, x, y, this);
+        
+        // Start animation if not already running
+        if (!this.animationId) {
+            this.animate();
+        }
+        
+        // Schedule next character
+        setTimeout(() => {
+            this.animateCharacters(text, startX, startY, charIndex + 1, callback);
+        }, this.textFireworks.charDelay);
     }
     
     animate() {
