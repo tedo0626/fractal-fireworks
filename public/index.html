@@ -29,6 +29,20 @@
                 <input type="range" id="sizeSlider" min="0.5" max="3.0" step="0.1" value="1.0" class="slider">
             </div>
         </div>
+        <div class="text-settings">
+            <div class="setting-group">
+                <label for="textSizeSlider">Text Size: <span id="textSizeValue">1.0</span></label>
+                <input type="range" id="textSizeSlider" min="0.5" max="2.5" step="0.1" value="1.0" class="slider">
+            </div>
+            <div class="setting-group">
+                <label for="particleQuantitySlider">Particle Quantity: <span id="particleQuantityValue">3</span></label>
+                <input type="range" id="particleQuantitySlider" min="1" max="8" value="3" class="slider">
+            </div>
+            <div class="setting-group">
+                <label for="glowIntensitySlider">Glow Intensity: <span id="glowIntensityValue">1.0</span></label>
+                <input type="range" id="glowIntensitySlider" min="0.2" max="3.0" step="0.1" value="1.0" class="slider">
+            </div>
+        </div>
         <canvas id="fireworksCanvas"></canvas>
         <div class="instructions">
             💡 Click anywhere on the screen to launch pixelated fractal fireworks at that location

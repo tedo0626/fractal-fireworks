@@ -121,6 +121,21 @@ h1 {
     border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
+.text-settings {
+    position: absolute;
+    top: 380px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 25px;
+    z-index: 10;
+    background: rgba(0, 0, 0, 0.4);
+    padding: 15px 25px;
+    border-radius: 15px;
+    backdrop-filter: blur(15px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
 .setting-group {
     display: flex;
     flex-direction: column;
@@ -249,6 +264,13 @@ h1 {
     
     .settings {
         top: 320px;
+        flex-direction: column;
+        gap: 15px;
+        padding: 12px 20px;
+    }
+    
+    .text-settings {
+        top: 460px;
         flex-direction: column;
         gap: 15px;
         padding: 12px 20px;

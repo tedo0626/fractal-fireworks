@@ -15,7 +15,7 @@ class ParticlePool {
                 isTextParticle: false,
                 targetX: 0, targetY: 0,
                 attractionForce: 0, formationStage: 0,
-                originalSpeed: 0
+                originalSpeed: 0, glowIntensity: 1.0
             };
             this.particles.push(particle);
             this.available.push(particle);
@@ -370,13 +370,13 @@ class TextFireworks {
         return lines;
     }
     
-    createCharacterFireworks(char, centerX, centerY, fireworksInstance) {
+    createCharacterFireworks(char, centerX, centerY, fireworksInstance, textSize = 1.0, particleQuantity = 3, glowIntensity = 1.0) {
         const pattern = this.getCharacterPattern(char);
         const colors = ['#ff0080', '#00ff80', '#8000ff', '#ff8000', '#0080ff', '#ff0040', '#40ff00'];
         const color = colors[Math.floor(Math.random() * colors.length)];
         
-        const pixelSize = 6;
-        const particlesPerPixel = 3;
+        const pixelSize = 6 * textSize;
+        const particlesPerPixel = particleQuantity;
         
         // Calculate pattern dimensions and offset for centering
         const patternWidth = pattern[0].length * pixelSize;
@@ -400,7 +400,8 @@ class TextFireworks {
         
         // Create explosion particles
         const explosionParticles = [];
-        const particleCount = Math.min(120, targetPositions.length + 30);
+        const baseParticleCount = Math.min(120, targetPositions.length + 30);
+        const particleCount = Math.floor(baseParticleCount * (0.5 + particleQuantity * 0.15));
         
         for (let i = 0; i < particleCount; i++) {
             const angle = Math.random() * Math.PI * 2;
@@ -424,6 +425,7 @@ class TextFireworks {
             particle.formationStage = 0; // 0: exploding, 1: coalescing, 2: formed, 3: dissolving
             particle.originalSpeed = speed;
             particle.attractionForce = 0;
+            particle.glowIntensity = glowIntensity;
             
             // Assign target position if available
             if (i < targetPositions.length) {
@@ -503,6 +505,11 @@ class FractalFireworks {
         // Text fireworks system
         this.textFireworks = new TextFireworks();
         
+        // Text fireworks settings
+        this.textSize = 1.0;
+        this.particleQuantity = 3;
+        this.glowIntensity = 1.0;
+        
         // Rendering optimization
         this.colorGroups = new Map();
         this.lastRenderTime = 0;
@@ -553,6 +560,21 @@ class FractalFireworks {
             if (e.key === 'Enter') {
                 this.createTextFireworks();
             }
+        });
+        
+        document.getElementById('textSizeSlider').addEventListener('input', (e) => {
+            this.textSize = parseFloat(e.target.value);
+            document.getElementById('textSizeValue').textContent = this.textSize.toFixed(1);
+        });
+        
+        document.getElementById('particleQuantitySlider').addEventListener('input', (e) => {
+            this.particleQuantity = parseInt(e.target.value);
+            document.getElementById('particleQuantityValue').textContent = this.particleQuantity;
+        });
+        
+        document.getElementById('glowIntensitySlider').addEventListener('input', (e) => {
+            this.glowIntensity = parseFloat(e.target.value);
+            document.getElementById('glowIntensityValue').textContent = this.glowIntensity.toFixed(1);
         });
         
         this.canvas.addEventListener('click', (e) => {
@@ -675,7 +697,7 @@ class FractalFireworks {
         
         const line = lines[currentLineIndex];
         const startY = this.canvas.height * 0.5 + (currentLineIndex * this.textFireworks.lineHeight);
-        const startX = (this.canvas.width - (line.length * this.textFireworks.charSpacing)) / 2;
+        const startX = (this.canvas.width - (line.length * this.textFireworks.charSpacing * this.textSize)) / 2;
         
         // Animate characters in this line
         this.animateCharacters(line, startX, startY, 0, () => {
@@ -693,11 +715,11 @@ class FractalFireworks {
         }
         
         const char = text[charIndex];
-        const x = startX + (charIndex * this.textFireworks.charSpacing);
+        const x = startX + (charIndex * this.textFireworks.charSpacing * this.textSize);
         const y = startY;
         
-        // Create fireworks for this character
-        this.textFireworks.createCharacterFireworks(char, x, y, this);
+        // Create fireworks for this character with user settings
+        this.textFireworks.createCharacterFireworks(char, x, y, this, this.textSize, this.particleQuantity, this.glowIntensity);
         
         // Start animation if not already running
         if (!this.animationId) {
@@ -826,7 +848,6 @@ class FractalFireworks {
         for (const [color, particles] of this.colorGroups) {
             this.bufferCtx.fillStyle = color;
             this.bufferCtx.shadowColor = color;
-            this.bufferCtx.shadowBlur = shadowBlur;
             
             // Batch render all particles of the same color
             this.bufferCtx.beginPath();
@@ -834,6 +855,10 @@ class FractalFireworks {
             for (const particle of particles) {
                 const alpha = particle.life;
                 const size = particle.size * qualityLevel;
+                
+                // Apply glow intensity for text particles
+                const glowMultiplier = particle.isTextParticle ? particle.glowIntensity : 1.0;
+                this.bufferCtx.shadowBlur = shadowBlur * glowMultiplier;
                 
                 // Pixelated rendering
                 const pixelX = Math.floor(particle.x / this.pixelSize) * this.pixelSize;
