@@ -10,7 +10,12 @@ class ParticlePool {
                 x: 0, y: 0, vx: 0, vy: 0,
                 life: 0, decay: 0, color: '',
                 size: 0, gravity: 0, fractalPhase: 0,
-                depth: 0, active: false
+                depth: 0, active: false,
+                // Text fireworks properties
+                isTextParticle: false,
+                targetX: 0, targetY: 0,
+                attractionForce: 0, formationStage: 0,
+                originalSpeed: 0
             };
             this.particles.push(particle);
             this.available.push(particle);
@@ -79,13 +84,16 @@ class TextFireworks {
     constructor() {
         this.charSpacing = 60;
         this.lineHeight = 80;
-        this.maxCharsPerLine = 15;
+        this.maxCharsPerLine = 12;
         this.textQueue = [];
         this.isPlaying = false;
         this.currentLine = 0;
         this.currentChar = 0;
-        this.charDelay = 300; // ms between characters
-        this.lineDelay = 1500; // ms between lines
+        this.charDelay = 2500; // ms between characters
+        this.lineDelay = 3000; // ms between lines
+        this.explosionDuration = 600; // ms for explosion phase
+        this.coalesceDuration = 1000; // ms for coalesce phase
+        this.holdDuration = 800; // ms to hold letter shape
     }
     
     // Character patterns for fireworks (simplified bitmap)
@@ -361,43 +369,106 @@ class TextFireworks {
         return lines;
     }
     
-    createCharacterFireworks(char, x, y, fireworksInstance) {
+    createCharacterFireworks(char, centerX, centerY, fireworksInstance) {
         const pattern = this.getCharacterPattern(char);
         const colors = ['#ff0080', '#00ff80', '#8000ff', '#ff8000', '#0080ff', '#ff0040', '#40ff00'];
         const color = colors[Math.floor(Math.random() * colors.length)];
         
-        const pixelSize = 4;
-        const particlesPerPixel = 3;
+        const pixelSize = 6;
+        const particlesPerPixel = 4;
+        const explosionRadius = 80;
         
+        // Calculate pattern dimensions and offset for centering
+        const patternWidth = pattern[0].length * pixelSize;
+        const patternHeight = pattern.length * pixelSize;
+        const offsetX = centerX - patternWidth / 2;
+        const offsetY = centerY - patternHeight / 2;
+        
+        // First create explosion particles
+        const explosionParticles = [];
+        for (let i = 0; i < 150; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 8 + 4;
+            
+            const particle = fireworksInstance.particlePool.get();
+            if (!particle) continue;
+            
+            particle.x = centerX;
+            particle.y = centerY;
+            particle.vx = Math.cos(angle) * speed;
+            particle.vy = Math.sin(angle) * speed;
+            particle.life = 1.0;
+            particle.decay = 0.008;
+            particle.color = color;
+            particle.size = Math.random() * 2 + 1;
+            particle.gravity = 0.02;
+            particle.fractalPhase = Math.random() * Math.PI * 2;
+            particle.depth = 0;
+            particle.isTextParticle = true;
+            particle.formationStage = 0; // 0: exploding, 1: coalescing, 2: formed
+            particle.originalSpeed = speed;
+            
+            explosionParticles.push(particle);
+        }
+        
+        // Calculate target positions for letter formation
+        const targetPositions = [];
         for (let row = 0; row < pattern.length; row++) {
             for (let col = 0; col < pattern[row].length; col++) {
                 if (pattern[row][col] === '█') {
-                    const pixelX = x + col * pixelSize;
-                    const pixelY = y + row * pixelSize;
-                    
-                    // Create multiple particles per pixel for better effect
                     for (let p = 0; p < particlesPerPixel; p++) {
-                        const particle = fireworksInstance.particlePool.get();
-                        if (!particle) continue;
-                        
-                        const angle = Math.random() * Math.PI * 2;
-                        const speed = Math.random() * 2 + 1;
-                        
-                        particle.x = pixelX + Math.random() * pixelSize;
-                        particle.y = pixelY + Math.random() * pixelSize;
-                        particle.vx = Math.cos(angle) * speed;
-                        particle.vy = Math.sin(angle) * speed;
-                        particle.life = 1.0;
-                        particle.decay = Math.random() * 0.015 + 0.01;
-                        particle.color = color;
-                        particle.size = Math.random() * 2 + 1;
-                        particle.gravity = 0.02;
-                        particle.fractalPhase = Math.random() * Math.PI * 2;
-                        particle.depth = 0;
+                        const targetX = offsetX + col * pixelSize + Math.random() * pixelSize;
+                        const targetY = offsetY + row * pixelSize + Math.random() * pixelSize;
+                        targetPositions.push({ x: targetX, y: targetY });
                     }
                 }
             }
         }
+        
+        // Assign target positions to particles
+        for (let i = 0; i < Math.min(explosionParticles.length, targetPositions.length); i++) {
+            const particle = explosionParticles[i];
+            const target = targetPositions[i];
+            particle.targetX = target.x;
+            particle.targetY = target.y;
+            particle.attractionForce = 0;
+        }
+        
+        // Start coalescing animation after explosion
+        setTimeout(() => {
+            explosionParticles.forEach(particle => {
+                if (particle.active) {
+                    particle.formationStage = 1;
+                    particle.attractionForce = 0.05;
+                    particle.gravity = 0.01;
+                    particle.decay = 0.002; // Slower decay during formation
+                }
+            });
+        }, this.explosionDuration);
+        
+        // Mark particles as formed
+        setTimeout(() => {
+            explosionParticles.forEach(particle => {
+                if (particle.active) {
+                    particle.formationStage = 2;
+                    particle.attractionForce = 0.1;
+                    particle.gravity = 0;
+                    particle.decay = 0.001; // Even slower decay when formed
+                }
+            });
+        }, this.explosionDuration + this.coalesceDuration);
+        
+        // Start dissolving after hold duration
+        setTimeout(() => {
+            explosionParticles.forEach(particle => {
+                if (particle.active) {
+                    particle.formationStage = 3;
+                    particle.attractionForce = 0;
+                    particle.gravity = 0.02;
+                    particle.decay = 0.015; // Normal decay for dissolving
+                }
+            });
+        }, this.explosionDuration + this.coalesceDuration + this.holdDuration);
     }
 }
 
@@ -585,7 +656,7 @@ class FractalFireworks {
         }
         
         const line = lines[currentLineIndex];
-        const startY = this.canvas.height * 0.3 + (currentLineIndex * this.textFireworks.lineHeight);
+        const startY = this.canvas.height * 0.5 + (currentLineIndex * this.textFireworks.lineHeight);
         const startX = (this.canvas.width - (line.length * this.textFireworks.charSpacing)) / 2;
         
         // Animate characters in this line
@@ -652,11 +723,41 @@ class FractalFireworks {
             particle.fractalPhase += 0.05;
             const fractalInfluence = Math.sin(particle.fractalPhase) * 0.2;
             
-            particle.vx *= 0.99;
-            particle.vy *= 0.99;
+            // Handle text particle attraction
+            if (particle.isTextParticle && particle.formationStage === 1) {
+                // Coalescing stage - attract to target position
+                const dx = particle.targetX - particle.x;
+                const dy = particle.targetY - particle.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                if (distance > 2) {
+                    particle.vx += dx * particle.attractionForce;
+                    particle.vy += dy * particle.attractionForce;
+                }
+                
+                // Damping
+                particle.vx *= 0.95;
+                particle.vy *= 0.95;
+            } else if (particle.isTextParticle && particle.formationStage === 2) {
+                // Formed stage - stay at target position
+                const dx = particle.targetX - particle.x;
+                const dy = particle.targetY - particle.y;
+                
+                particle.vx += dx * particle.attractionForce;
+                particle.vy += dy * particle.attractionForce;
+                
+                // Strong damping to hold position
+                particle.vx *= 0.8;
+                particle.vy *= 0.8;
+            } else {
+                // Normal particle physics
+                particle.vx *= 0.99;
+                particle.vy *= 0.99;
+            }
+            
             particle.vy += particle.gravity;
             
-            particle.x += particle.vx + fractalInfluence;
+            particle.x += particle.vx + (particle.isTextParticle ? 0 : fractalInfluence);
             particle.y += particle.vy;
             particle.life -= particle.decay;
             
