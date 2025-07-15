@@ -1,0 +1,19 @@
+{
+  "name": "fractal-fireworks",
+  "version": "1.0.0",
+  "description": "A Digital Ocean app with fractal fireworks animation",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "keywords": ["fireworks", "fractal", "animation", "digital-ocean"],
+  "author": "Your Name",
+  "license": "MIT"
+}
