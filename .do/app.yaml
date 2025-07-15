@@ -3,7 +3,7 @@ services:
 - name: web
   source_dir: /
   github:
-    repo: your-username/fractal-fireworks
+    repo: tedo0626/fractal-fireworks
     branch: main
   run_command: npm start
   environment_slug: node-js
