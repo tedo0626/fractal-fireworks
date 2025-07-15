@@ -1,20 +1,108 @@
+class ParticlePool {
+    constructor(size = 10000) {
+        this.particles = [];
+        this.available = [];
+        this.active = [];
+        
+        // Pre-allocate particles
+        for (let i = 0; i < size; i++) {
+            const particle = {
+                x: 0, y: 0, vx: 0, vy: 0,
+                life: 0, decay: 0, color: '',
+                size: 0, gravity: 0, fractalPhase: 0,
+                depth: 0, active: false
+            };
+            this.particles.push(particle);
+            this.available.push(particle);
+        }
+    }
+    
+    get() {
+        if (this.available.length > 0) {
+            const particle = this.available.pop();
+            particle.active = true;
+            this.active.push(particle);
+            return particle;
+        }
+        return null;
+    }
+    
+    release(particle) {
+        particle.active = false;
+        const index = this.active.indexOf(particle);
+        if (index !== -1) {
+            this.active.splice(index, 1);
+            this.available.push(particle);
+        }
+    }
+    
+    clear() {
+        this.active.forEach(particle => {
+            particle.active = false;
+            this.available.push(particle);
+        });
+        this.active.length = 0;
+    }
+}
+
+class PerformanceMonitor {
+    constructor() {
+        this.frameCount = 0;
+        this.lastTime = performance.now();
+        this.fps = 60;
+        this.targetFPS = 45;
+        this.qualityLevel = 1.0;
+    }
+    
+    update() {
+        this.frameCount++;
+        const currentTime = performance.now();
+        
+        if (currentTime - this.lastTime >= 1000) {
+            this.fps = this.frameCount;
+            this.frameCount = 0;
+            this.lastTime = currentTime;
+            
+            // Adjust quality based on FPS
+            if (this.fps < this.targetFPS) {
+                this.qualityLevel = Math.max(0.3, this.qualityLevel - 0.1);
+            } else if (this.fps > this.targetFPS + 10) {
+                this.qualityLevel = Math.min(1.0, this.qualityLevel + 0.05);
+            }
+        }
+        
+        return this.qualityLevel;
+    }
+}
+
 class FractalFireworks {
     constructor(canvas) {
         this.canvas = canvas;
         this.ctx = canvas.getContext('2d');
-        this.particles = [];
-        this.afterglowParticles = [];
+        this.particlePool = new ParticlePool(8000);
+        this.performanceMonitor = new PerformanceMonitor();
         this.animationId = null;
         
         // Performance optimizations
         this.ctx.imageSmoothingEnabled = false;
         this.pixelSize = 2;
+        this.maxParticles = 2000;
         
         // User settings
         this.fireworkCount = 3;
         this.fireworkSize = 1;
-        this.particleCount = 150;
-        this.fractalDepth = 4;
+        this.baseParticleCount = 80; // Reduced from 150
+        this.fractalDepth = 3; // Reduced from 4
+        
+        // Rendering optimization
+        this.colorGroups = new Map();
+        this.lastRenderTime = 0;
+        this.renderInterval = 16; // ~60fps
+        
+        // Canvas buffer for faster rendering
+        this.bufferCanvas = document.createElement('canvas');
+        this.bufferCtx = this.bufferCanvas.getContext('2d');
+        this.bufferCtx.imageSmoothingEnabled = false;
         
         this.resizeCanvas();
         window.addEventListener('resize', () => this.resizeCanvas());
@@ -25,6 +113,8 @@ class FractalFireworks {
     resizeCanvas() {
         this.canvas.width = window.innerWidth;
         this.canvas.height = window.innerHeight;
+        this.bufferCanvas.width = this.canvas.width;
+        this.bufferCanvas.height = this.canvas.height;
     }
     
     setupEventListeners() {
@@ -50,11 +140,7 @@ class FractalFireworks {
             const rect = this.canvas.getBoundingClientRect();
             const x = e.clientX - rect.left;
             const y = e.clientY - rect.top;
-            for (let i = 0; i < this.fireworkCount; i++) {
-                setTimeout(() => {
-                    this.createFirework(x + (Math.random() - 0.5) * 50, y + (Math.random() - 0.5) * 50);
-                }, i * 100);
-            }
+            this.createMultipleFireworks(x, y);
         });
     }
     
@@ -64,164 +150,193 @@ class FractalFireworks {
                 const x = Math.random() * this.canvas.width;
                 const y = Math.random() * (this.canvas.height * 0.7) + this.canvas.height * 0.1;
                 this.createFirework(x, y);
-            }, i * 150);
+            }, i * 100);
+        }
+    }
+    
+    createMultipleFireworks(x, y) {
+        for (let i = 0; i < this.fireworkCount; i++) {
+            setTimeout(() => {
+                this.createFirework(
+                    x + (Math.random() - 0.5) * 40,
+                    y + (Math.random() - 0.5) * 40
+                );
+            }, i * 80);
         }
     }
     
     createFirework(x, y) {
-        const colors = ['#ff0080', '#00ff80', '#8000ff', '#ff8000', '#0080ff', '#ff0040', '#40ff00', '#ff4080', '#8040ff'];
+        const colors = ['#ff0080', '#00ff80', '#8000ff', '#ff8000', '#0080ff', '#ff0040', '#40ff00'];
         const color = colors[Math.floor(Math.random() * colors.length)];
+        const qualityLevel = this.performanceMonitor.qualityLevel;
         
-        const particleCount = Math.floor(this.particleCount * this.fireworkSize);
-        const branches = 8;
+        // Adaptive particle count based on performance
+        const particleCount = Math.floor(this.baseParticleCount * this.fireworkSize * qualityLevel);
+        const branches = Math.floor(6 * qualityLevel) + 2;
+        const maxDepth = Math.floor(this.fractalDepth * qualityLevel);
         
-        // Create fractal explosion pattern
-        for (let depth = 0; depth < this.fractalDepth; depth++) {
-            const depthFactor = (this.fractalDepth - depth) / this.fractalDepth;
-            const depthParticles = Math.floor(particleCount * depthFactor * 0.3);
+        // Limit total particles
+        if (this.particlePool.active.length + particleCount > this.maxParticles) {
+            return;
+        }
+        
+        // Create fractal explosion pattern with reduced complexity
+        for (let depth = 0; depth < maxDepth; depth++) {
+            const depthFactor = (maxDepth - depth) / maxDepth;
+            const depthParticles = Math.floor(particleCount * depthFactor * 0.4);
             
             for (let i = 0; i < depthParticles; i++) {
+                const particle = this.particlePool.get();
+                if (!particle) break;
+                
                 const angle = (Math.PI * 2 * i) / depthParticles;
                 const branchAngle = (Math.PI * 2 * Math.floor(i / (depthParticles / branches))) / branches;
                 
-                // Enhanced fractal pattern with multiple sine waves
-                const fractalFactor = Math.sin(angle * 3) * 0.4 + 
-                                    Math.cos(angle * 5) * 0.3 + 
-                                    Math.sin(angle * 7) * 0.2;
+                // Simplified fractal pattern for better performance
+                const fractalFactor = Math.sin(angle * 2) * 0.3 + Math.cos(angle * 3) * 0.2;
+                const speed = (Math.random() * 3 + 1) * (1 + fractalFactor) * this.fireworkSize * depthFactor;
+                const branchInfluence = Math.cos(branchAngle) * 0.3;
                 
-                const speed = (Math.random() * 4 + 1) * (1 + fractalFactor) * this.fireworkSize * depthFactor;
-                const branchInfluence = Math.cos(branchAngle + depth) * 0.5;
-                
-                const vx = Math.cos(angle) * speed + Math.cos(branchAngle) * branchInfluence;
-                const vy = Math.sin(angle) * speed + Math.sin(branchAngle) * branchInfluence;
-                
-                this.particles.push({
-                    x: x,
-                    y: y,
-                    vx: vx,
-                    vy: vy,
-                    life: 1.0,
-                    decay: Math.random() * 0.015 + 0.008,
-                    color: color,
-                    size: Math.max(1, Math.random() * 2 + 1) * this.fireworkSize,
-                    gravity: 0.03,
-                    fractalPhase: Math.random() * Math.PI * 2,
-                    depth: depth,
-                    pixelated: true
-                });
+                particle.x = x;
+                particle.y = y;
+                particle.vx = Math.cos(angle) * speed + Math.cos(branchAngle) * branchInfluence;
+                particle.vy = Math.sin(angle) * speed + Math.sin(branchAngle) * branchInfluence;
+                particle.life = 1.0;
+                particle.decay = Math.random() * 0.02 + 0.01;
+                particle.color = color;
+                particle.size = Math.max(1, Math.random() * 2 + 1) * this.fireworkSize;
+                particle.gravity = 0.02;
+                particle.fractalPhase = Math.random() * Math.PI * 2;
+                particle.depth = depth;
             }
         }
         
-        this.animate();
+        if (!this.animationId) {
+            this.animate();
+        }
     }
     
     animate() {
-        if (this.animationId) {
-            cancelAnimationFrame(this.animationId);
+        const currentTime = performance.now();
+        
+        // Throttle rendering for better performance
+        if (currentTime - this.lastRenderTime < this.renderInterval) {
+            this.animationId = requestAnimationFrame(() => this.animate());
+            return;
         }
         
-        const animateFrame = () => {
-            // More efficient clearing with reduced alpha for better afterglow
-            this.ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
-            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        this.lastRenderTime = currentTime;
+        const qualityLevel = this.performanceMonitor.update();
+        
+        // Update performance display
+        this.updatePerformanceDisplay();
+        
+        // Clear buffer with optimized alpha for afterglow
+        this.bufferCtx.fillStyle = `rgba(0, 0, 0, ${0.08 * qualityLevel})`;
+        this.bufferCtx.fillRect(0, 0, this.bufferCanvas.width, this.bufferCanvas.height);
+        
+        // Group particles by color for batch rendering
+        this.colorGroups.clear();
+        
+        // Update and group particles
+        const activeParticles = this.particlePool.active.slice();
+        for (let i = activeParticles.length - 1; i >= 0; i--) {
+            const particle = activeParticles[i];
             
-            // Update particles with optimization
-            this.particles = this.particles.filter(particle => {
-                particle.fractalPhase += 0.08;
-                const fractalInfluence = Math.sin(particle.fractalPhase) * 0.3 + 
-                                       Math.cos(particle.fractalPhase * 1.5) * 0.2;
-                
-                particle.vx *= 0.985;
-                particle.vy *= 0.985;
-                particle.vy += particle.gravity;
-                
-                particle.x += particle.vx + fractalInfluence;
-                particle.y += particle.vy;
-                
-                particle.life -= particle.decay;
-                
-                // Create afterglow particles when particle is about to die
-                if (particle.life < 0.3 && particle.life > 0.25) {
-                    this.afterglowParticles.push({
-                        x: particle.x,
-                        y: particle.y,
-                        life: 0.8,
-                        decay: 0.005,
-                        color: particle.color,
-                        size: particle.size * 0.5,
-                        alpha: 0.3
-                    });
-                }
+            // Update particle physics
+            particle.fractalPhase += 0.05;
+            const fractalInfluence = Math.sin(particle.fractalPhase) * 0.2;
+            
+            particle.vx *= 0.99;
+            particle.vy *= 0.99;
+            particle.vy += particle.gravity;
+            
+            particle.x += particle.vx + fractalInfluence;
+            particle.y += particle.vy;
+            particle.life -= particle.decay;
+            
+            // Cull off-screen particles
+            if (particle.x < -10 || particle.x > this.canvas.width + 10 ||
+                particle.y < -10 || particle.y > this.canvas.height + 10 ||
+                particle.life <= 0) {
+                this.particlePool.release(particle);
+                continue;
+            }
+            
+            // Group by color for batch rendering
+            if (!this.colorGroups.has(particle.color)) {
+                this.colorGroups.set(particle.color, []);
+            }
+            this.colorGroups.get(particle.color).push(particle);
+        }
+        
+        // Batch render particles by color
+        this.batchRenderParticles(qualityLevel);
+        
+        // Copy buffer to main canvas
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        this.ctx.drawImage(this.bufferCanvas, 0, 0);
+        
+        // Continue animation if particles exist
+        if (this.particlePool.active.length > 0) {
+            this.animationId = requestAnimationFrame(() => this.animate());
+        } else {
+            this.animationId = null;
+        }
+    }
+    
+    batchRenderParticles(qualityLevel) {
+        const shadowBlur = Math.floor(8 * qualityLevel);
+        
+        for (const [color, particles] of this.colorGroups) {
+            this.bufferCtx.fillStyle = color;
+            this.bufferCtx.shadowColor = color;
+            this.bufferCtx.shadowBlur = shadowBlur;
+            
+            // Batch render all particles of the same color
+            this.bufferCtx.beginPath();
+            
+            for (const particle of particles) {
+                const alpha = particle.life;
+                const size = particle.size * qualityLevel;
                 
                 // Pixelated rendering
-                if (particle.pixelated) {
-                    this.drawPixelatedParticle(particle);
-                } else {
-                    this.drawSmoothParticle(particle);
-                }
+                const pixelX = Math.floor(particle.x / this.pixelSize) * this.pixelSize;
+                const pixelY = Math.floor(particle.y / this.pixelSize) * this.pixelSize;
+                const pixelSize = Math.max(this.pixelSize, Math.floor(size / this.pixelSize) * this.pixelSize);
                 
-                return particle.life > 0;
-            });
-            
-            // Update and draw afterglow particles
-            this.afterglowParticles = this.afterglowParticles.filter(glow => {
-                glow.life -= glow.decay;
-                
-                this.ctx.save();
-                this.ctx.globalAlpha = glow.life * glow.alpha;
-                this.ctx.fillStyle = glow.color;
-                this.ctx.shadowBlur = 15;
-                this.ctx.shadowColor = glow.color;
-                this.ctx.beginPath();
-                this.ctx.arc(glow.x, glow.y, glow.size, 0, Math.PI * 2);
-                this.ctx.fill();
-                this.ctx.restore();
-                
-                return glow.life > 0;
-            });
-            
-            if (this.particles.length > 0 || this.afterglowParticles.length > 0) {
-                this.animationId = requestAnimationFrame(animateFrame);
+                this.bufferCtx.globalAlpha = alpha;
+                this.bufferCtx.fillRect(pixelX, pixelY, pixelSize, pixelSize);
             }
-        };
-        
-        animateFrame();
+            
+            this.bufferCtx.shadowBlur = 0;
+            this.bufferCtx.globalAlpha = 1.0;
+        }
     }
     
-    drawPixelatedParticle(particle) {
-        const pixelX = Math.floor(particle.x / this.pixelSize) * this.pixelSize;
-        const pixelY = Math.floor(particle.y / this.pixelSize) * this.pixelSize;
-        const pixelSize = Math.floor(particle.size / this.pixelSize) * this.pixelSize + this.pixelSize;
+    updatePerformanceDisplay() {
+        const fpsElement = document.getElementById('fpsValue');
+        const qualityElement = document.getElementById('qualityValue');
         
-        this.ctx.save();
-        this.ctx.globalAlpha = particle.life;
-        this.ctx.fillStyle = particle.color;
-        this.ctx.shadowBlur = 8;
-        this.ctx.shadowColor = particle.color;
-        this.ctx.fillRect(pixelX, pixelY, pixelSize, pixelSize);
-        this.ctx.restore();
-    }
-    
-    drawSmoothParticle(particle) {
-        this.ctx.save();
-        this.ctx.globalAlpha = particle.life;
-        this.ctx.fillStyle = particle.color;
-        this.ctx.shadowBlur = 12;
-        this.ctx.shadowColor = particle.color;
-        this.ctx.beginPath();
-        this.ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
-        this.ctx.fill();
-        this.ctx.restore();
+        if (fpsElement) {
+            fpsElement.textContent = this.performanceMonitor.fps;
+        }
+        if (qualityElement) {
+            const qualityPercent = Math.round(this.performanceMonitor.qualityLevel * 100);
+            qualityElement.textContent = `${qualityPercent}%`;
+        }
     }
     
     clearFireworks() {
-        this.particles = [];
-        this.afterglowParticles = [];
+        this.particlePool.clear();
         if (this.animationId) {
             cancelAnimationFrame(this.animationId);
+            this.animationId = null;
         }
         this.ctx.fillStyle = 'rgba(0, 0, 0, 1)';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        this.bufferCtx.fillStyle = 'rgba(0, 0, 0, 1)';
+        this.bufferCtx.fillRect(0, 0, this.bufferCanvas.width, this.bufferCanvas.height);
     }
 }
 
@@ -229,10 +344,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const canvas = document.getElementById('fireworksCanvas');
     const fireworks = new FractalFireworks(canvas);
     
-    // Reduced auto-launch frequency for better performance
+    // Reduced auto-launch frequency
     setInterval(() => {
-        if (Math.random() < 0.05) {
+        if (Math.random() < 0.03 && fireworks.particlePool.active.length < 1000) {
             fireworks.launchFireworks();
         }
-    }, 3000);
+    }, 4000);
 });

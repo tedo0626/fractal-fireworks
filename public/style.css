@@ -208,6 +208,21 @@ h1 {
     backdrop-filter: blur(5px);
 }
 
+.performance-indicator {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 0.8rem;
+    font-family: monospace;
+    background: rgba(0, 0, 0, 0.3);
+    padding: 8px 12px;
+    border-radius: 8px;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    z-index: 15;
+}
+
 #fireworksCanvas {
     position: absolute;
     top: 0;
